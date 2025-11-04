@@ -188,7 +188,7 @@ function WorkflowEditor({ params }: { params: Promise<{ workflowId: string }> })
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-dvh items-center justify-center">
         <div className="text-center">
           <div className="text-lg font-semibold">Loading workflow...</div>
           <div className="text-muted-foreground text-sm">Please wait</div>
@@ -198,7 +198,7 @@ function WorkflowEditor({ params }: { params: Promise<{ workflowId: string }> })
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden">
       <WorkflowToolbar workflowId={workflowId} />
       <div className="flex flex-1 overflow-hidden">
         <main className="relative flex-1 overflow-hidden">

@@ -217,7 +217,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen flex-col">
+      <div className="flex h-dvh flex-col">
         <AppHeader title="Settings" showBackButton />
         <div className="flex flex-1 items-center justify-center">
           <div className="text-muted-foreground">Loading...</div>
@@ -227,7 +227,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-dvh flex-col">
       <AppHeader title="Settings" showBackButton />
       <div className="container mx-auto max-w-4xl p-8">
         <div className="mb-8">
