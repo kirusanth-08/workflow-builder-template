@@ -464,7 +464,7 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
       await api.workflow.delete(currentWorkflowId);
       setShowDeleteDialog(false);
       toast.success("Workflow deleted successfully");
-      router.push("/");
+      window.location.href = "/";
     } catch (error) {
       console.error("Failed to delete workflow:", error);
       toast.error("Failed to delete workflow. Please try again.");
@@ -571,7 +571,6 @@ function useWorkflowActions(state: ReturnType<typeof useWorkflowState>) {
     handleRunWithoutSaving,
     handleClearWorkflow,
     handleDeleteWorkflow,
-    handleNewWorkflow,
     handleRenameWorkflow,
     handleDownload,
     loadWorkflows,
@@ -868,9 +867,8 @@ function WorkflowMenuComponent({
         <DropdownMenuContent align="start" className="w-64">
           <DropdownMenuItem
             className="flex items-center justify-between"
-            onClick={actions.handleNewWorkflow}
           >
-            <span>New Workflow</span>
+            <a href="/">New Workflow</a>
             {!workflowId && <Check className="size-4 shrink-0" />}
           </DropdownMenuItem>
           <DropdownMenuSeparator />

@@ -408,17 +408,17 @@ const PanelInner = () => {
             <div className="flex shrink-0 items-center gap-2 border-t p-4">
               <Button
                 onClick={() => setShowClearDialog(true)}
-                size="icon"
                 variant="ghost"
               >
                 <Eraser className="size-4" />
+                Clear
               </Button>
               <Button
                 onClick={() => setShowDeleteDialog(true)}
-                size="icon"
                 variant="ghost"
               >
                 <Trash2 className="size-4" />
+                Delete
               </Button>
             </div>
           </TabsContent>

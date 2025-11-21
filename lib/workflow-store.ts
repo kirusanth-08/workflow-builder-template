@@ -26,7 +26,7 @@ export const isExecutingAtom = atom(false);
 export const isLoadingAtom = atom(false);
 export const isGeneratingAtom = atom(false);
 export const currentWorkflowIdAtom = atom<string | null>(null);
-export const currentWorkflowNameAtom = atom<string>("Untitled Workflow");
+export const currentWorkflowNameAtom = atom<string>("");
 
 // UI state atoms
 export const propertiesPanelActiveTabAtom = atom<string>("properties");
