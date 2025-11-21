@@ -51,7 +51,7 @@ function buildZodSchema(
 }
 
 export async function generateTextStep(input: {
-  workflowId?: string;
+  integrationId?: string;
   aiModel?: string;
   aiPrompt?: string;
   aiFormat?: string;
@@ -59,8 +59,8 @@ export async function generateTextStep(input: {
 }): Promise<{ text: string } | Record<string, unknown>> {
   "use step";
 
-  const credentials = input.workflowId
-    ? await fetchCredentials(input.workflowId)
+  const credentials = input.integrationId
+    ? await fetchCredentials(input.integrationId)
     : {};
 
   const apiKey = credentials.AI_GATEWAY_API_KEY || credentials.OPENAI_API_KEY;

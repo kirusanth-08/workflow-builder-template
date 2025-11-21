@@ -12,7 +12,7 @@ import postgres from "postgres";
 import { fetchCredentials } from "../credential-fetcher";
 
 type DatabaseQueryInput = {
-  workflowId?: string;
+  integrationId?: string;
   dbQuery?: string;
   query?: string;
 };
@@ -96,8 +96,8 @@ export async function databaseQueryStep(
     };
   }
 
-  const credentials = input.workflowId
-    ? await fetchCredentials(input.workflowId)
+  const credentials = input.integrationId
+    ? await fetchCredentials(input.integrationId)
     : {};
 
   const databaseUrl = credentials.DATABASE_URL;
