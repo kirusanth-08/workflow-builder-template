@@ -100,7 +100,7 @@ export function WorkflowCanvas(_props: WorkflowCanvasProps) {
     if (!currentWorkflowId) {
       setViewportReady(true);
       setDefaultViewport(undefined);
-      setShouldFitView(true); // Enable fitView for landing page to center the trigger node
+      setShouldFitView(true);
       viewportInitialized.current = true;
       return;
     }
@@ -401,6 +401,11 @@ export function WorkflowCanvas(_props: WorkflowCanvasProps) {
         edgeTypes={edgeTypes}
         elementsSelectable={!isGenerating}
         fitView={shouldFitView}
+        fitViewOptions={{
+          maxZoom: 1,
+          minZoom: 0.5,
+          padding: 0.2,
+        }}
         isValidConnection={isValidConnection}
         nodes={nodes}
         nodesConnectable={!isGenerating}
