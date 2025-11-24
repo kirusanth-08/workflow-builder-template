@@ -944,9 +944,14 @@ function WorkflowMenuComponent({
           <ChevronDown className="size-3 opacity-50" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuItem className="flex items-center justify-between">
-            <a href="/">New Workflow</a>
-            {!workflowId && <Check className="size-4 shrink-0" />}
+          <DropdownMenuItem
+            asChild
+            className="flex items-center justify-between"
+          >
+            <a href="/">
+              New Workflow{" "}
+              {!workflowId && <Check className="size-4 shrink-0" />}
+            </a>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           {state.allWorkflows.length === 0 ? (

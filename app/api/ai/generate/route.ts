@@ -2,119 +2,214 @@ import { streamText } from "ai";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
-const system = `You are a workflow automation expert. Generate a workflow based on the user's description.
+// Simple type for operations
+type Operation = {
+  op:
+    | "setName"
+    | "setDescription"
+    | "addNode"
+    | "addEdge"
+    | "removeNode"
+    | "removeEdge"
+    | "updateNode";
+  name?: string;
+  description?: string;
+  node?: unknown;
+  edge?: unknown;
+  nodeId?: string;
+  edgeId?: string;
+  updates?: {
+    position?: { x: number; y: number };
+    data?: unknown;
+  };
+};
 
-CRITICAL RULE: Every workflow must have EXACTLY ONE trigger node. Never create multiple triggers.
-
-Return a JSON object with this structure:
-{
-  "name": "Workflow Name",
-  "description": "Brief description",
-  "nodes": [
-    {
-      "id": "unique-id",
-      "type": "trigger|action",
-      "position": { "x": number, "y": number },
-      "data": {
-        "label": "Node Label",
-        "description": "Node description",
-        "type": "trigger|action",
-        "config": { /* type-specific config */ },
-        "status": "idle"
-      }
-    }
-  ],
-  "edges": [
-    {
-      "id": "edge-id",
-      "source": "source-node-id",
-      "target": "target-node-id",
-      "type": "default"
-    }
-  ]
+function encodeMessage(encoder: TextEncoder, message: object): Uint8Array {
+  return encoder.encode(`${JSON.stringify(message)}\n`);
 }
 
-Node types and their configs:
+async function processOperationStream(
+  textStream: AsyncIterable<string>,
+  encoder: TextEncoder,
+  controller: ReadableStreamDefaultController
+): Promise<void> {
+  let buffer = "";
+  let operationCount = 0;
+  let chunkCount = 0;
 
-TRIGGER NODES:
-- Manual: { triggerType: "Manual" }
-- Webhook: { 
-    triggerType: "Webhook", 
-    webhookPath: "/webhooks/descriptive-name", 
-    webhookMethod: "POST",
-    requestSchema: [
-      { name: "fieldName", type: "string", required: true },
-      { name: "email", type: "string", required: true }
-    ],
-    mockRequest: {
-      "fieldName": "example value",
-      "email": "user@example.com"
+  for await (const chunk of textStream) {
+    chunkCount += 1;
+    buffer += chunk;
+
+    // Split by newlines and process complete lines
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("```")) {
+        continue;
+      }
+
+      try {
+        const operation = JSON.parse(trimmed) as Operation;
+        operationCount += 1;
+
+        console.log(`[API] Operation ${operationCount}:`, operation.op);
+
+        // Send operation immediately
+        controller.enqueue(
+          encodeMessage(encoder, {
+            type: "operation",
+            operation,
+          })
+        );
+      } catch {
+        // Skip invalid JSON lines
+        console.warn(
+          "[API] Skipping invalid JSON line:",
+          trimmed.substring(0, 50)
+        );
+      }
     }
   }
-- Schedule: { triggerType: "Schedule", scheduleCron: "0 9 * * *", scheduleTimezone: "America/New_York" }
 
-ACTION NODES:
-- Send Email: { actionType: "Send Email", emailTo: "user@example.com", emailSubject: "Subject", emailBody: "Body text" }
-- Send Slack Message: { actionType: "Send Slack Message", slackChannel: "#general", slackMessage: "Message text" }
-- Create Ticket: { actionType: "Create Ticket", ticketTitle: "Title", ticketDescription: "Description", ticketPriority: "2" }
-- Database Query: { actionType: "Database Query", dbQuery: "SELECT * FROM users WHERE status = 'active'", dbTable: "users" }
-- HTTP Request: { actionType: "HTTP Request", httpMethod: "POST", endpoint: "https://api.example.com/endpoint", httpHeaders: "{}", httpBody: "{}" }
-- Generate Text: { 
-    actionType: "Generate Text", 
-    aiModel: "gpt-5", 
-    aiFormat: "object",
-    aiPrompt: "Generate a message based on the data",
-    aiSchema: "[{"name":"message","type":"string","required":true},{"name":"subject","type":"string","required":true}]"
+  // Process any remaining buffer content
+  if (buffer.trim()) {
+    const trimmed = buffer.trim();
+    if (!trimmed.startsWith("```")) {
+      try {
+        const operation = JSON.parse(trimmed) as Operation;
+        operationCount += 1;
+
+        console.log(
+          `[API] Operation ${operationCount} (from buffer):`,
+          operation.op
+        );
+
+        // Send operation immediately
+        controller.enqueue(
+          encodeMessage(encoder, {
+            type: "operation",
+            operation,
+          })
+        );
+      } catch {
+        console.warn(
+          "[API] Failed to parse remaining buffer:",
+          trimmed.substring(0, 100)
+        );
+      }
+    }
   }
-- Generate Image: { actionType: "Generate Image", imageModel: "openai/dall-e-3", imagePrompt: "A beautiful landscape" }
-- Condition: { 
-    actionType: "Condition",
-    condition: "{{@node-id:Label.field}} === 'value'"
+
+  console.log(
+    `[API] Stream complete. Chunks: ${chunkCount}, Operations: ${operationCount}`
+  );
+
+  // Send completion
+  controller.enqueue(
+    encodeMessage(encoder, {
+      type: "complete",
+    })
+  );
+}
+
+const system = `You are a workflow automation expert. Generate a workflow based on the user's description.
+
+CRITICAL: Output your workflow as INDIVIDUAL OPERATIONS, one per line in JSONL format.
+Each line must be a complete, separate JSON object.
+
+Operations you can output:
+1. {"op": "setName", "name": "Workflow Name"}
+2. {"op": "setDescription", "description": "Brief description"}
+3. {"op": "addNode", "node": {COMPLETE_NODE_OBJECT}}
+4. {"op": "addEdge", "edge": {COMPLETE_EDGE_OBJECT}}
+5. {"op": "removeNode", "nodeId": "node-id-to-remove"}
+6. {"op": "removeEdge", "edgeId": "edge-id-to-remove"}
+7. {"op": "updateNode", "nodeId": "node-id", "updates": {"position": {"x": 100, "y": 200}}}
+
+IMPORTANT RULES:
+- Every workflow must have EXACTLY ONE trigger node
+- Output ONE operation per line
+- Each line must be complete, valid JSON
+- Start with setName and setDescription
+- Then add nodes one at a time
+- Finally add edges one at a time to CONNECT ALL NODES
+- CRITICAL: Every node (except the last) MUST be connected to at least one other node
+- To update node positions or properties, use updateNode operation
+- NEVER output explanatory text - ONLY JSON operations
+- Do NOT wrap in markdown code blocks
+- Do NOT add explanatory text
+
+Node structure:
+{
+  "id": "unique-id",
+  "type": "trigger" or "action",
+  "position": {"x": number, "y": number},
+  "data": {
+    "label": "Node Label",
+    "description": "Node description",
+    "type": "trigger" or "action",
+    "config": {...},
+    "status": "idle"
   }
+}
 
-IMPORTANT ABOUT CONDITIONS:
-- Condition is an ACTION type, NOT a separate node type
-- All condition nodes must have type: "action" with actionType: "Condition"
-- Each condition node can only check ONE condition
-- CRITICAL: If you need multiple branches (if/else if/else), create MULTIPLE condition nodes
-- Example: "if X then A, if Y then B" needs TWO separate condition nodes
-- Example: "if joke is good send slack, if joke is bad create ticket" needs TWO condition nodes:
-  1. First condition checks "joke is good" -> connects to slack
-  2. Second condition checks "joke is bad" -> connects to ticket
-- Conditions use JavaScript expressions with template variables
-- Condition expression examples:
-  - { actionType: "Condition", condition: "{{@node-1:Status Check.status}} === 'active'" }
-  - { actionType: "Condition", condition: "{{@node-2:Count Query.count}} > 10" }
-  - { actionType: "Condition", condition: "{{@trigger:Contact Form.priority}} === 'high'" }
-- Each condition node should have edges connecting it to the appropriate next steps
-- When user asks for "if/else" or conditional logic, create separate action nodes with actionType: "Condition" for each branch
+Trigger types:
+- Manual: {"triggerType": "Manual"}
+- Webhook: {"triggerType": "Webhook", "webhookPath": "/webhooks/name", ...}
+- Schedule: {"triggerType": "Schedule", "scheduleCron": "0 9 * * *", ...}
 
-IMPORTANT:
-- CRITICAL: Every workflow must have EXACTLY ONE trigger node (Manual, Webhook, or Schedule)
-- CRITICAL: There are only TWO node types: "trigger" and "action"
-- Condition is an ACTION type (actionType: "Condition"), not a node type
-- CRITICAL: Each condition node can ONLY check ONE condition - if you need multiple branches, create MULTIPLE condition nodes
-- Example: "if good then A, else if bad then B" = TWO condition nodes (one for good, one for bad)
-- If modifying a workflow that already has a trigger, keep only one trigger
-- For Webhook triggers, ALWAYS include requestSchema (array of field definitions) and mockRequest (sample data object)
-- requestSchema should describe expected incoming data with name, type (string/number/boolean), and required fields
-- mockRequest should contain realistic example data matching the schema
-- For contact forms, include fields like: name, email, message, phone (optional)
-- CRITICAL: When generating content with AI (messages, emails, summaries, etc), ALWAYS use "Generate Text" action, NOT HTTP Request
-- For Generate Text actions, prefer aiFormat: "object" with a properly defined aiSchema for structured output
-- aiSchema should be a JSON string containing an array of field definitions: [{"name":"fieldName","type":"string|number|boolean","required":true}]
-- Use aiFormat: "text" only when generating unstructured text like long-form content
-- CRITICAL: To reference outputs from other nodes, use the template format: {{@nodeId:NodeLabel.fieldName}}
-- Template examples: {{@node-1:Generate Message.message}}, {{@trigger-node:Contact Form.email}}, {{@node-2:Query Results.count}}
-- The format is ALWAYS {{@nodeId:label.field}} where nodeId is the node's id property, label is the node's data.label, and field is the output field name
-- For Database Query actions, ALWAYS include a realistic SQL query in the "dbQuery" field
-- For HTTP Request actions, include proper httpMethod, endpoint, httpHeaders, and httpBody
-- For Send Email actions, include emailTo, emailSubject, and emailBody
-- For Send Slack Message actions, include slackChannel and slackMessage
-- Position nodes in a left-to-right flow with proper spacing (x: 100, 400, 700, etc., y: 200)
-- CONDITION NODES: Conditions are action nodes with actionType: "Condition". They evaluate a condition and can route to different nodes based on the result
-- When a user asks for conditional logic, branching, or if/else behavior, create SEPARATE action nodes with actionType: "Condition" for EACH branch
-- Return ONLY valid JSON, no markdown or explanations`;
+Action types:
+- Send Email: {"actionType": "Send Email", "emailTo": "user@example.com", "emailSubject": "Subject", "emailBody": "Body"}
+- Send Slack Message: {"actionType": "Send Slack Message", "slackChannel": "#general", "slackMessage": "Message"}
+- Create Ticket: {"actionType": "Create Ticket", "ticketTitle": "Title", "ticketDescription": "Description", "ticketPriority": "2"}
+- Database Query: {"actionType": "Database Query", "dbQuery": "SELECT * FROM table", "dbTable": "table"}
+- HTTP Request: {"actionType": "HTTP Request", "httpMethod": "POST", "endpoint": "https://api.example.com", "httpHeaders": "{}", "httpBody": "{}"}
+- Generate Text: {"actionType": "Generate Text", "aiModel": "gpt-5", "aiFormat": "text", "aiPrompt": "Your prompt here"}
+- Generate Image: {"actionType": "Generate Image", "imageModel": "openai/dall-e-3", "imagePrompt": "Image description"}
+- Condition: {"actionType": "Condition", "condition": "{{@nodeId:Label.field}} === 'value'"}
+
+CRITICAL ABOUT CONDITION NODES:
+- Condition nodes evaluate a boolean expression
+- When TRUE: ALL connected nodes execute
+- When FALSE: ALL connected nodes are SKIPPED
+- For if/else logic, CREATE MULTIPLE SEPARATE condition nodes (one per branch)
+- NEVER connect multiple different outcome paths to a single condition node
+- Each condition should check for ONE specific case
+
+Example: "if good send Slack, if bad create ticket" needs TWO conditions:
+{"op": "addNode", "node": {"id": "cond-good", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'good'"}}}}
+{"op": "addNode", "node": {"id": "cond-bad", "data": {"config": {"condition": "{{@rate:Rate.value}} === 'bad'"}}}}
+{"op": "addEdge", "edge": {"source": "rate", "target": "cond-good"}}
+{"op": "addEdge", "edge": {"source": "rate", "target": "cond-bad"}}
+{"op": "addEdge", "edge": {"source": "cond-good", "target": "slack"}}
+{"op": "addEdge", "edge": {"source": "cond-bad", "target": "ticket"}}
+
+Edge structure:
+{
+  "id": "edge-id",
+  "source": "source-node-id",
+  "target": "target-node-id",
+  "type": "default"
+}
+
+WORKFLOW FLOW:
+- Trigger connects to first action
+- Actions connect in sequence or to multiple branches
+- ALWAYS create edges to connect the workflow flow
+- For linear workflows: trigger -> action1 -> action2 -> etc
+- For branching (conditions): one source can connect to multiple targets
+
+Example output:
+{"op": "setName", "name": "Contact Form Workflow"}
+{"op": "setDescription", "description": "Processes contact form submissions"}
+{"op": "addNode", "node": {"id": "trigger-1", "type": "trigger", "position": {"x": 100, "y": 200}, "data": {"label": "Contact Form", "type": "trigger", "config": {"triggerType": "Manual"}, "status": "idle"}}}
+{"op": "addNode", "node": {"id": "send-email", "type": "action", "position": {"x": 400, "y": 200}, "data": {"label": "Send Email", "type": "action", "config": {"actionType": "Send Email", "emailTo": "admin@example.com", "emailSubject": "New Contact", "emailBody": "New contact form submission"}, "status": "idle"}}}
+{"op": "addEdge", "edge": {"id": "e1", "source": "trigger-1", "target": "send-email", "type": "default"}}
+
+REMEMBER: After adding all nodes, you MUST add edges to connect them! Every node should be reachable from the trigger.`;
 
 export async function POST(request: Request) {
   try {
@@ -136,8 +231,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Use app's API key for text-to-workflow generation
-    // (User's API keys are used for workflow execution via integrations)
     const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
@@ -149,17 +242,50 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build the user prompt with context about existing workflow if provided
+    // Build the user prompt
     let userPrompt = prompt;
     if (existingWorkflow) {
-      userPrompt = `I have an existing workflow that I want you to MODIFY.
+      // Identify nodes and their labels for context
+      const nodesList = (existingWorkflow.nodes || [])
+        .map(
+          (n: { id: string; data?: { label?: string } }) =>
+            `- ${n.id} (${n.data?.label || "Unlabeled"})`
+        )
+        .join("\n");
 
-Current workflow:
+      const edgesList = (existingWorkflow.edges || [])
+        .map(
+          (e: { id: string; source: string; target: string }) =>
+            `- ${e.id}: ${e.source} -> ${e.target}`
+        )
+        .join("\n");
+
+      userPrompt = `I have an existing workflow. I want you to make ONLY the changes I request.
+
+Current workflow nodes:
+${nodesList}
+
+Current workflow edges:
+${edgesList}
+
+Full workflow data (DO NOT recreate these, they already exist):
 ${JSON.stringify(existingWorkflow, null, 2)}
 
-User's modification request: ${prompt}
+User's request: ${prompt}
 
-IMPORTANT: Return the COMPLETE modified workflow. If the user asks to remove nodes, return a workflow WITHOUT those nodes. If they ask to change the number of nodes, return exactly that many nodes. Do not add to the existing workflow - replace it entirely with the modified version.`;
+IMPORTANT: Output ONLY the operations needed to make the requested changes.
+- If adding new nodes: output "addNode" operations for NEW nodes only, then IMMEDIATELY output "addEdge" operations to connect them to the workflow
+- If adding new edges: output "addEdge" operations for NEW edges only  
+- If removing nodes: output "removeNode" operations with the nodeId to remove
+- If removing edges: output "removeEdge" operations with the edgeId to remove
+- If changing name/description: output "setName"/"setDescription" only if changed
+- CRITICAL: New nodes MUST be connected with edges - always add edges after adding nodes
+- When connecting nodes, look at the node IDs in the current workflow list above
+- DO NOT output operations for existing nodes/edges unless specifically modifying them
+- Keep the existing workflow structure and only add/modify/remove what was requested
+
+Example: If user says "connect node A to node B", output:
+{"op": "addEdge", "edge": {"id": "e-new", "source": "A", "target": "B", "type": "default"}}`;
     }
 
     const result = streamText({
@@ -168,15 +294,35 @@ IMPORTANT: Return the COMPLETE modified workflow. If the user asks to remove nod
       prompt: userPrompt,
     });
 
-    // Convert stream to text
-    let fullText = "";
-    for await (const chunk of result.textStream) {
-      fullText += chunk;
-    }
+    // Create a streaming response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          await processOperationStream(result.textStream, encoder, controller);
+          controller.close();
+        } catch (error) {
+          controller.enqueue(
+            encodeMessage(encoder, {
+              type: "error",
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to generate workflow",
+            })
+          );
+          controller.close();
+        }
+      },
+    });
 
-    const workflowData = JSON.parse(fullText);
-
-    return NextResponse.json(workflowData);
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     console.error("Failed to generate workflow:", error);
     return NextResponse.json(

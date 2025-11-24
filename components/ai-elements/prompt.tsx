@@ -95,47 +95,59 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
           );
         }
         
-        const workflowData = await api.ai.generate(prompt, existingWorkflow);
+        // Use streaming API with incremental updates
+        const workflowData = await api.ai.generateStream(
+          prompt,
+          (partialData) => {
+            // Update UI incrementally with animated edges
+            const edgesWithAnimatedType = (partialData.edges || []).map((edge) => ({
+              ...edge,
+              type: "animated",
+            }));
+
+            // Validate: ensure only ONE trigger node exists
+            const triggerNodes = (partialData.nodes || []).filter(
+              (node) => node.data?.type === "trigger"
+            );
+
+            let validEdges = edgesWithAnimatedType;
+
+            if (triggerNodes.length > 1) {
+              // Keep only the first trigger and all non-trigger nodes
+              const firstTrigger = triggerNodes[0];
+              const nonTriggerNodes = (partialData.nodes || []).filter(
+                (node) => node.data?.type !== "trigger"
+              );
+              partialData.nodes = [firstTrigger, ...nonTriggerNodes];
+
+              // Remove edges connected to removed triggers
+              const removedTriggerIds = triggerNodes.slice(1).map((n) => n.id);
+              validEdges = edgesWithAnimatedType.filter(
+                (edge) =>
+                  !removedTriggerIds.includes(edge.source) &&
+                  !removedTriggerIds.includes(edge.target)
+              );
+            }
+
+            // Update the canvas incrementally
+            setNodes(partialData.nodes || []);
+            setEdges(validEdges);
+            if (partialData.name) {
+              setCurrentWorkflowName(partialData.name);
+            }
+          },
+          existingWorkflow
+        );
         
-        console.log("[AI Prompt] Received workflow data");
+        console.log("[AI Prompt] Received final workflow data");
         console.log("[AI Prompt] Nodes:", workflowData.nodes?.length || 0);
         console.log("[AI Prompt] Edges:", workflowData.edges?.length || 0);
 
-        // Ensure all edges use the animated type to match manual connections
-        const edgesWithAnimatedType = (workflowData.edges || []).map((edge) => ({
+        // Use edges from workflow data with animated type
+        const finalEdges = (workflowData.edges || []).map((edge) => ({
           ...edge,
           type: "animated",
         }));
-
-        // Validate: ensure only ONE trigger node exists
-        const triggerNodes = (workflowData.nodes || []).filter(
-          (node) => node.data?.type === "trigger"
-        );
-        
-        let validEdges = edgesWithAnimatedType;
-        
-        if (triggerNodes.length > 1) {
-          console.warn(
-            `[AI Prompt] AI generated ${triggerNodes.length} triggers. Keeping only the first one.`
-          );
-          
-          // Keep only the first trigger and all non-trigger nodes
-          const firstTrigger = triggerNodes[0];
-          const nonTriggerNodes = (workflowData.nodes || []).filter(
-            (node) => node.data?.type !== "trigger"
-          );
-          workflowData.nodes = [firstTrigger, ...nonTriggerNodes];
-          
-          // Remove edges connected to removed triggers
-          const removedTriggerIds = triggerNodes.slice(1).map((n) => n.id);
-          validEdges = edgesWithAnimatedType.filter(
-            (edge) =>
-              !removedTriggerIds.includes(edge.source) &&
-              !removedTriggerIds.includes(edge.target)
-          );
-          
-          toast.warning("Removed extra triggers (workflows can only have 1 trigger)");
-        }
 
         // Validate: check for blank/incomplete nodes
         console.log("[AI Prompt] Validating nodes:", workflowData.nodes);
@@ -184,13 +196,11 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
             name: workflowData.name || "AI Generated Workflow",
             description: workflowData.description || "",
             nodes: workflowData.nodes || [],
-            edges: validEdges,
+            edges: finalEdges,
           });
 
-          setNodes(workflowData.nodes || []);
-          setEdges(validEdges);
+          // State already updated by streaming callback
           setCurrentWorkflowId(newWorkflow.id);
-          setCurrentWorkflowName(workflowData.name || "AI Generated Workflow");
           
           toast.success("Created workflow");
           
@@ -204,8 +214,7 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
           console.log("[AI Prompt] Updating existing workflow:", workflowId);
           console.log("[AI Prompt] Has existingWorkflow context:", !!existingWorkflow);
           
-          // If we sent existing workflow data, AI returns a complete replacement
-          // Otherwise, append new nodes to empty workflow
+          // State already updated by streaming callback
           if (existingWorkflow) {
             console.log("[AI Prompt] REPLACING workflow with AI response");
             console.log(
@@ -215,22 +224,8 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
               workflowData.nodes?.length || 0,
               "nodes"
             );
-            
-            // Replace workflow entirely with AI's modified version
-            setNodes(workflowData.nodes || []);
-            setEdges(validEdges);
-            if (workflowData.name) {
-              setCurrentWorkflowName(workflowData.name);
-            }
-            
-            toast.success("Modified workflow");
           } else {
             console.log("[AI Prompt] Setting workflow for empty canvas");
-            
-            // For empty workflows, just set the new data
-            setNodes(workflowData.nodes || []);
-            setEdges(validEdges);
-            setCurrentWorkflowName(workflowData.name || "AI Generated Workflow");
             
             toast.success("Generated workflow");
           }
@@ -247,7 +242,7 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
             name: workflowData.name,
             description: workflowData.description,
             nodes: workflowData.nodes,
-            edges: validEdges,
+            edges: finalEdges,
           });
         }
 
@@ -315,20 +310,33 @@ export function AIPrompt({ workflowId, onWorkflowCreated }: AIPromptProps) {
                   handleGenerate(e as any);
                 }
               }}
-              placeholder={isFocused ? "Describe your workflow with natural language..." : "Ask AI... (⌘+K)"}
+              placeholder={isFocused ? "Describe your workflow with natural language..." : "Ask AI..."}
               ref={inputRef}
               rows={1}
               value={prompt}
             />
           )}
-          <Button
-            className={`${!prompt.trim() || isGenerating ? "invisible" : ""} shrink-0`}
-            disabled={!prompt.trim() || isGenerating}
-            size="sm"
-            type="submit"
-          >
-            <ArrowUp className="size-4" />
-          </Button>
+          {!prompt.trim() && !isGenerating && !isFocused ? (
+            <Button
+              className="shrink-0 h-auto p-0 text-xs text-muted-foreground hover:bg-transparent"
+              onClick={() => inputRef.current?.focus()}
+              type="button"
+              variant="ghost"
+            >
+              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
+          ) : (
+            <Button
+              className="shrink-0"
+              disabled={!prompt.trim() || isGenerating}
+              size="sm"
+              type="submit"
+            >
+              <ArrowUp className="size-4" />
+            </Button>
+          )}
         </form>
       </div>
     </>

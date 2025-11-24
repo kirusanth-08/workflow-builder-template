@@ -590,8 +590,8 @@ export const PanelInner = () => {
               />
             ) : null}
 
-            {(selectedNode.data.type !== "action" ||
-              selectedNode.data.config?.actionType) && (
+            {selectedNode.data.type !== "action" ||
+            selectedNode.data.config?.actionType ? (
               <>
                 <div className="space-y-2">
                   <Label className="ml-1" htmlFor="label">
@@ -618,7 +618,7 @@ export const PanelInner = () => {
                   />
                 </div>
               </>
-            )}
+            ) : null}
           </div>
           {selectedNode.data.type === "action" && (
             <div className="flex shrink-0 items-center justify-between border-t p-4">
