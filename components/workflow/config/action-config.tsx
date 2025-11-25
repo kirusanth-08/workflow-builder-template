@@ -444,6 +444,7 @@ function GenerateTextFields({
             <SelectItem value="gpt-4o">GPT-4o</SelectItem>
             <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
             <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+            <SelectItem value="claude-opus-4.5">Claude Opus 4.5</SelectItem>
             <SelectItem value="claude-3-5-sonnet-20241022">
               Claude 3.5 Sonnet
             </SelectItem>
