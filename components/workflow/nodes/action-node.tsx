@@ -12,12 +12,13 @@ import {
   Zap,
 } from "lucide-react";
 import Image from "next/image";
-import { memo } from "react";
+import { memo, useState } from "react";
 import {
   Node,
   NodeDescription,
   NodeTitle,
 } from "@/components/ai-elements/node";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { IntegrationIcon } from "@/components/ui/integration-icon";
 import { cn } from "@/lib/utils";
 import {
@@ -173,6 +174,7 @@ type ActionNodeProps = NodeProps & {
 export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
   const selectedExecutionId = useAtomValue(selectedExecutionIdAtom);
   const executionLogs = useAtomValue(executionLogsAtom);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
 
   if (!data) {
     return null;
@@ -237,6 +239,7 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
   const aiModel = getAiModel();
 
   return (
+    <>
     <Node
       className={cn(
         "relative flex h-48 w-48 flex-col items-center justify-center shadow-none transition-all duration-150 ease-out",
@@ -257,7 +260,14 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
 
       <div className="flex flex-col items-center justify-center gap-3 p-6">
         {hasGeneratedImage ? (
-          <div className="relative size-12 overflow-hidden rounded-lg">
+          <button
+            className="relative size-12 cursor-zoom-in overflow-hidden rounded-lg transition-transform hover:scale-105"
+            onClick={(e) => {
+              e.stopPropagation();
+              setImageDialogOpen(true);
+            }}
+            type="button"
+          >
             <Image
               alt="Generated image"
               className="object-cover"
@@ -266,7 +276,7 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
               src={`data:image/png;base64,${(nodeLog.output as { base64: string }).base64}`}
               unoptimized
             />
-          </div>
+          </button>
         ) : (
           getProviderLogo(actionType)
         )}
@@ -281,7 +291,28 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
           {aiModel && <ModelBadge model={aiModel} />}
         </div>
       </div>
+
     </Node>
+
+    {/* Image zoom dialog */}
+    {hasGeneratedImage && (
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-3xl p-2" showCloseButton={false}>
+          <DialogTitle className="sr-only">Generated Image</DialogTitle>
+          <div className="relative aspect-square w-full overflow-hidden rounded-lg">
+            <Image
+              alt="Generated image"
+              className="object-contain"
+              fill
+              sizes="(max-width: 768px) 100vw, 768px"
+              src={`data:image/png;base64,${(nodeLog.output as { base64: string }).base64}`}
+              unoptimized
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+  </>
   );
 });
 
