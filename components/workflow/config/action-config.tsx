@@ -501,13 +501,13 @@ function GenerateImageFields({
         <Select
           disabled={disabled}
           onValueChange={(value) => onUpdateConfig("imageModel", value)}
-          value={(config?.imageModel as string) || "gpt-image-1"}
+          value={(config?.imageModel as string) || "bfl/flux-2-pro"}
         >
           <SelectTrigger className="w-full" id="imageModel">
             <SelectValue placeholder="Select model" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="gpt-image-1">GPT Image 1</SelectItem>
+            <SelectItem value="bfl/flux-2-pro">FLUX.2 Pro</SelectItem>
             <SelectItem value="openai/dall-e-3">OpenAI DALL-E 3</SelectItem>
             <SelectItem value="openai/dall-e-2">OpenAI DALL-E 2</SelectItem>
             <SelectItem value="google/gemini-2.5-flash-image">
