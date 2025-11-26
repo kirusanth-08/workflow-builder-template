@@ -17,6 +17,7 @@ import { Canvas } from "@/components/ai-elements/canvas";
 import { Connection } from "@/components/ai-elements/connection";
 import { Controls } from "@/components/ai-elements/controls";
 import { AIPrompt } from "@/components/ai-elements/prompt";
+import { WorkflowToolbar } from "@/components/workflow/workflow-toolbar";
 import "@xyflow/react/dist/style.css";
 
 import { PlayCircle, Zap } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   hasUnsavedChangesAtom,
   isGeneratingAtom,
   isPanelAnimatingAtom,
+  isTransitioningFromHomepageAtom,
   nodesAtom,
   onEdgesChangeAtom,
   onNodesChangeAtom,
@@ -74,6 +76,7 @@ const edgeTypes = {
   temporary: Edge.Temporary,
 };
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: React Flow canvas requires complex setup
 export function WorkflowCanvas() {
   const [nodes, setNodes] = useAtom(nodesAtom);
   const [edges, setEdges] = useAtom(edgesAtom);
@@ -82,6 +85,9 @@ export function WorkflowCanvas() {
   const [showMinimap] = useAtom(showMinimapAtom);
   const rightPanelWidth = useAtomValue(rightPanelWidthAtom);
   const isPanelAnimating = useAtomValue(isPanelAnimatingAtom);
+  const [isTransitioningFromHomepage, setIsTransitioningFromHomepage] = useAtom(
+    isTransitioningFromHomepageAtom
+  );
   const onNodesChange = useSetAtom(onNodesChangeAtom);
   const onEdgesChange = useSetAtom(onEdgesChangeAtom);
   const setSelectedNode = useSetAtom(selectedNodeAtom);
@@ -108,23 +114,24 @@ export function WorkflowCanvas() {
 
   // Track which workflow we've fitted view for to prevent re-running
   const fittedViewForWorkflowRef = useRef<string | null | undefined>(undefined);
-  const initialRightPanelWidthRef = useRef<string | null | undefined>(undefined);
+  // Track if we have real nodes (not just placeholder "add" node)
+  const hasRealNodes = nodes.some((n) => n.type !== "add");
+  const hadRealNodesRef = useRef(false);
 
-  // Fit view when workflow changes (only on initial load, not on resize)
+  // Fit view when workflow changes (only on initial load, not home -> workflow)
   useEffect(() => {
     // Skip if we've already fitted view for this workflow
     if (fittedViewForWorkflowRef.current === currentWorkflowId) {
       return;
     }
 
-    // For workflow pages, wait for rightPanelWidth to be set initially
-    if (currentWorkflowId && rightPanelWidth === undefined) {
+    // Skip fitView for homepage -> workflow transition (viewport already set from homepage)
+    if (isTransitioningFromHomepage && viewportInitialized.current) {
+      fittedViewForWorkflowRef.current = currentWorkflowId;
+      setIsCanvasReady(true);
+      // Clear the flag after using it
+      setIsTransitioningFromHomepage(false);
       return;
-    }
-
-    // Store the initial panel width so we don't re-fit on resize
-    if (initialRightPanelWidthRef.current === undefined) {
-      initialRightPanelWidthRef.current = rightPanelWidth ?? null;
     }
 
     // Use fitView after a brief delay to ensure React Flow and nodes are ready
@@ -132,9 +139,37 @@ export function WorkflowCanvas() {
       fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
       fittedViewForWorkflowRef.current = currentWorkflowId;
       viewportInitialized.current = true;
-      setTimeout(() => setIsCanvasReady(true), 50);
+      // Show canvas immediately so width animation can be seen
+      setIsCanvasReady(true);
+      // Clear the flag
+      setIsTransitioningFromHomepage(false);
     }, 0);
-  }, [currentWorkflowId, fitView, rightPanelWidth]);
+  }, [
+    currentWorkflowId,
+    fitView,
+    isTransitioningFromHomepage,
+    setIsTransitioningFromHomepage,
+  ]);
+
+  // Fit view when first real node is added on homepage
+  useEffect(() => {
+    if (currentWorkflowId) {
+      return; // Only for homepage
+    }
+    // Check if we just got our first real node
+    if (hasRealNodes && !hadRealNodesRef.current) {
+      hadRealNodesRef.current = true;
+      // Fit view to center the new node
+      setTimeout(() => {
+        fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
+        viewportInitialized.current = true;
+        setIsCanvasReady(true);
+      }, 0);
+    } else if (!hasRealNodes) {
+      // Reset when back to placeholder only
+      hadRealNodesRef.current = false;
+    }
+  }, [currentWorkflowId, hasRealNodes, fitView]);
 
   const nodeTypes = useMemo(
     () => ({
@@ -375,6 +410,12 @@ export function WorkflowCanvas() {
           : "opacity 300ms",
       }}
     >
+      {/* Toolbar */}
+      <div className="pointer-events-auto">
+        <WorkflowToolbar workflowId={currentWorkflowId ?? undefined} />
+      </div>
+
+      {/* React Flow Canvas */}
       <Canvas
         className="bg-background"
         connectionLineComponent={Connection}

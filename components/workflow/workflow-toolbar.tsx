@@ -1,7 +1,7 @@
 "use client";
 
 import { useReactFlow } from "@xyflow/react";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useAtom, useSetAtom } from "jotai";
 import {
   Check,
   ChevronDown,
@@ -64,7 +64,6 @@ import {
   hasUnsavedChangesAtom,
   isExecutingAtom,
   isGeneratingAtom,
-  isPanelAnimatingAtom,
   isSavingAtom,
   nodesAtom,
   propertiesPanelActiveTabAtom,
@@ -88,7 +87,6 @@ import { PanelInner } from "./node-config-panel";
 
 type WorkflowToolbarProps = {
   workflowId?: string;
-  rightPanelWidth?: string;
 };
 
 // Helper functions to reduce complexity
@@ -1160,13 +1158,9 @@ function WorkflowDialogsComponent({
   );
 }
 
-export const WorkflowToolbar = ({
-  workflowId,
-  rightPanelWidth,
-}: WorkflowToolbarProps) => {
+export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
   const state = useWorkflowState();
   const actions = useWorkflowActions(state);
-  const isPanelAnimating = useAtomValue(isPanelAnimatingAtom);
 
   return (
     <>
@@ -1181,16 +1175,7 @@ export const WorkflowToolbar = ({
         />
       </Panel>
 
-      <div
-        className="pointer-events-auto fixed top-4 right-4 z-10"
-        style={{
-          // Use vw units since translateX % is relative to element width, not viewport
-          transform: rightPanelWidth
-            ? `translateX(-${rightPanelWidth.replace("%", "vw")})`
-            : undefined,
-          transition: isPanelAnimating ? "transform 300ms ease-out" : undefined,
-        }}
-      >
+      <div className="pointer-events-auto absolute top-4 right-4 z-10">
         <div className="flex flex-col-reverse items-end gap-2 lg:flex-row lg:items-center">
           <ToolbarActions
             actions={actions}

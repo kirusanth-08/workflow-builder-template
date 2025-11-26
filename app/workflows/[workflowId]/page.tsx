@@ -8,7 +8,6 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NodeConfigPanel } from "@/components/workflow/node-config-panel";
-import { WorkflowToolbar } from "@/components/workflow/workflow-toolbar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api-client";
 import {
@@ -85,7 +84,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       .split("; ")
       .find((row) => row.startsWith("sidebar-width="));
     if (widthCookie) {
-      const value = parseFloat(widthCookie.split("=")[1]);
+      const value = Number.parseFloat(widthCookie.split("=")[1]);
       if (!Number.isNaN(value) && value >= 20 && value <= 50) {
         setPanelWidth(value);
       }
@@ -107,6 +106,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
       hasInitialized.current = true;
       return;
     }
+    // biome-ignore lint/suspicious/noDocumentCookie: simple cookie storage for sidebar width
     document.cookie = `sidebar-width=${panelWidth}; path=/; max-age=31536000`; // 1 year
   }, [panelWidth]);
 
@@ -115,6 +115,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
     if (!hasReadCookies.current) {
       return;
     }
+    // biome-ignore lint/suspicious/noDocumentCookie: simple cookie storage for sidebar state
     document.cookie = `sidebar-collapsed=${panelCollapsed}; path=/; max-age=31536000`; // 1 year
   }, [panelCollapsed]);
 
@@ -134,11 +135,11 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
 
     // Set animating state before starting
     setIsPanelAnimating(true);
-    // Small delay to ensure the panel renders off-screen first
+    // Delay to ensure the canvas is visible at full width first
     const timer = setTimeout(() => {
       setPanelVisible(true);
       setHasSidebarBeenShown(true);
-    }, 50);
+    }, 100);
     // Clear animating state after animation completes (300ms + buffer)
     const animationTimer = setTimeout(() => setIsPanelAnimating(false), 400);
     return () => {
@@ -161,7 +162,7 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setIsPanelAnimating]);
+  }, [setIsPanelAnimating, setPanelCollapsed]);
 
   // Set right panel width for AI prompt positioning
   // Only set it after the panel is visible (animated in) to coordinate the animation
@@ -655,18 +656,6 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden">
-      {/* Toolbar floats on top of the persistent canvas */}
-      <div className="pointer-events-auto">
-        <WorkflowToolbar
-          rightPanelWidth={
-            isMobile || !panelVisible || panelCollapsed
-              ? undefined
-              : `${panelWidth}%`
-          }
-          workflowId={workflowId}
-        />
-      </div>
-
       {/* Workflow not found overlay */}
       {workflowNotFound && (
         <div className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center">
