@@ -1,9 +1,10 @@
 "use client";
 
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { use, useCallback, useEffect, useRef } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NodeConfigPanel } from "@/components/workflow/node-config-panel";
@@ -17,9 +18,11 @@ import {
   hasUnsavedChangesAtom,
   isExecutingAtom,
   isGeneratingAtom,
+  isPanelAnimatingAtom,
   isSavingAtom,
   nodesAtom,
   propertiesPanelActiveTabAtom,
+  rightPanelWidthAtom,
   selectedExecutionIdAtom,
   selectedNodeAtom,
   updateNodeDataAtom,
@@ -53,6 +56,87 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
   const setHasUnsavedChanges = useSetAtom(hasUnsavedChangesAtom);
   const [workflowNotFound, setWorkflowNotFound] = useAtom(workflowNotFoundAtom);
   const setActiveTab = useSetAtom(propertiesPanelActiveTabAtom);
+  const setRightPanelWidth = useSetAtom(rightPanelWidthAtom);
+  const setIsPanelAnimating = useSetAtom(isPanelAnimatingAtom);
+
+  // Panel width state for resizing
+  const [panelWidth, setPanelWidth] = useState(30); // percentage
+  const [panelVisible, setPanelVisible] = useState(false); // for slide-in animation
+  const [panelCollapsed, setPanelCollapsed] = useState(false); // for collapse/expand
+  const [isDraggingResize, setIsDraggingResize] = useState(false);
+  const isResizing = useRef(false);
+
+  // Trigger slide-in animation on mount
+  useEffect(() => {
+    // Set animating state before starting
+    setIsPanelAnimating(true);
+    // Small delay to ensure the panel renders off-screen first
+    const timer = setTimeout(() => setPanelVisible(true), 50);
+    // Clear animating state after animation completes (300ms + buffer)
+    const animationTimer = setTimeout(() => setIsPanelAnimating(false), 400);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(animationTimer);
+      setIsPanelAnimating(false);
+    };
+  }, [setIsPanelAnimating]);
+
+  // Keyboard shortcut Cmd/Ctrl+B to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault();
+        setIsPanelAnimating(true);
+        setPanelCollapsed((prev) => !prev);
+        setTimeout(() => setIsPanelAnimating(false), 350);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [setIsPanelAnimating]);
+
+  // Set right panel width for AI prompt positioning
+  // Only set it after the panel is visible (animated in) to coordinate the animation
+  useEffect(() => {
+    if (!isMobile && panelVisible && !panelCollapsed) {
+      setRightPanelWidth(`${panelWidth}%`);
+    } else {
+      // During initial render or when collapsed, set to null so prompt is centered
+      setRightPanelWidth(null);
+    }
+    return () => {
+      setRightPanelWidth(null);
+    };
+  }, [isMobile, setRightPanelWidth, panelWidth, panelVisible, panelCollapsed]);
+
+  // Handle panel resize
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    setIsDraggingResize(true);
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = ((window.innerWidth - e.clientX) / window.innerWidth) * 100;
+      // Clamp between 20% and 50%
+      setPanelWidth(Math.min(50, Math.max(20, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      setIsDraggingResize(false);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
 
   // Ref to track polling interval
   const executionPollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -503,7 +587,14 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
     <div className="flex h-dvh w-full flex-col overflow-hidden">
       {/* Toolbar floats on top of the persistent canvas */}
       <div className="pointer-events-auto">
-        <WorkflowToolbar workflowId={workflowId} />
+        <WorkflowToolbar
+          rightPanelWidth={
+            isMobile || !panelVisible || panelCollapsed
+              ? undefined
+              : `${panelWidth}%`
+          }
+          workflowId={workflowId}
+        />
       </div>
 
       {/* Workflow not found overlay */}
@@ -521,9 +612,57 @@ const WorkflowEditor = ({ params }: WorkflowPageProps) => {
         </div>
       )}
 
+      {/* Expand button when panel is collapsed */}
+      {!isMobile && panelCollapsed && (
+        <button
+          className="pointer-events-auto absolute top-1/2 right-0 z-20 flex size-6 -translate-y-1/2 items-center justify-center rounded-l-full border border-r-0 bg-background shadow-sm transition-colors hover:bg-muted"
+          onClick={() => {
+            setIsPanelAnimating(true);
+            setPanelCollapsed(false);
+            setTimeout(() => setIsPanelAnimating(false), 350);
+          }}
+          type="button"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      )}
+
       {/* Right panel overlay (desktop only) */}
       {!isMobile && (
-        <div className="pointer-events-auto absolute top-12 right-0 bottom-0 z-20 w-[30%] min-w-[300px] max-w-[50%] border-l bg-background">
+        <div
+          className="pointer-events-auto absolute inset-y-0 right-0 z-20 border-l bg-background transition-transform duration-300 ease-out"
+          style={{
+            width: `${panelWidth}%`,
+            transform:
+              panelVisible && !panelCollapsed
+                ? "translateX(0)"
+                : "translateX(100%)",
+          }}
+        >
+          {/* Resize handle with collapse button */}
+          <div
+            className="group absolute inset-y-0 left-0 z-10 w-3 cursor-col-resize"
+            onMouseDown={handleResizeStart}
+          >
+            {/* Hover indicator */}
+            <div className="absolute inset-y-0 left-0 w-1 bg-transparent transition-colors group-hover:bg-blue-500 group-active:bg-blue-600" />
+            {/* Collapse button - hidden while resizing */}
+            {!isDraggingResize && (
+              <button
+                className="absolute top-1/2 left-0 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border bg-background opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:bg-muted"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsPanelAnimating(true);
+                  setPanelCollapsed(true);
+                  setTimeout(() => setIsPanelAnimating(false), 350);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                type="button"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            )}
+          </div>
           <NodeConfigPanel />
         </div>
       )}

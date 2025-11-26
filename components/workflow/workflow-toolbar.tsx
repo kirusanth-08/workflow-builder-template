@@ -1,7 +1,7 @@
 "use client";
 
 import { useReactFlow } from "@xyflow/react";
-import { useAtom, useSetAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import {
   Check,
   ChevronDown,
@@ -64,6 +64,7 @@ import {
   hasUnsavedChangesAtom,
   isExecutingAtom,
   isGeneratingAtom,
+  isPanelAnimatingAtom,
   isSavingAtom,
   nodesAtom,
   propertiesPanelActiveTabAtom,
@@ -87,6 +88,7 @@ import { PanelInner } from "./node-config-panel";
 
 type WorkflowToolbarProps = {
   workflowId?: string;
+  rightPanelWidth?: string;
 };
 
 // Helper functions to reduce complexity
@@ -1158,9 +1160,13 @@ function WorkflowDialogsComponent({
   );
 }
 
-export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
+export const WorkflowToolbar = ({
+  workflowId,
+  rightPanelWidth,
+}: WorkflowToolbarProps) => {
   const state = useWorkflowState();
   const actions = useWorkflowActions(state);
+  const isPanelAnimating = useAtomValue(isPanelAnimatingAtom);
 
   return (
     <>
@@ -1175,25 +1181,30 @@ export const WorkflowToolbar = ({ workflowId }: WorkflowToolbarProps) => {
         />
       </Panel>
 
-      <Panel
-        className="flex flex-col-reverse items-end gap-2 border-none bg-transparent p-0 lg:flex-row lg:items-center"
-        position="top-right"
+      <div
+        className="absolute top-4 right-4 z-10"
+        style={{
+          transform: rightPanelWidth ? `translateX(-${rightPanelWidth})` : undefined,
+          transition: isPanelAnimating ? "transform 300ms ease-out" : undefined,
+        }}
       >
-        <ToolbarActions
-          actions={actions}
-          state={state}
-          workflowId={workflowId}
-        />
-        <div className="flex items-center gap-2">
-          {!workflowId && (
-            <>
-              <GitHubStarsButton />
-              <DeployButton />
-            </>
-          )}
-          <UserMenu />
+        <div className="flex flex-col-reverse items-end gap-2 lg:flex-row lg:items-center">
+          <ToolbarActions
+            actions={actions}
+            state={state}
+            workflowId={workflowId}
+          />
+          <div className="flex items-center gap-2">
+            {!workflowId && (
+              <>
+                <GitHubStarsButton />
+                <DeployButton />
+              </>
+            )}
+            <UserMenu />
+          </div>
         </div>
-      </Panel>
+      </div>
 
       <WorkflowDialogsComponent actions={actions} state={state} />
     </>

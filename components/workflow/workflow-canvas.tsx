@@ -32,6 +32,7 @@ import {
   nodesAtom,
   onEdgesChangeAtom,
   onNodesChangeAtom,
+  rightPanelWidthAtom,
   selectedEdgeAtom,
   selectedNodeAtom,
   showMinimapAtom,
@@ -79,6 +80,7 @@ export function WorkflowCanvas() {
   const [isGenerating] = useAtom(isGeneratingAtom);
   const currentWorkflowId = useAtomValue(currentWorkflowIdAtom);
   const [showMinimap] = useAtom(showMinimapAtom);
+  const rightPanelWidth = useAtomValue(rightPanelWidthAtom);
   const onNodesChange = useSetAtom(onNodesChangeAtom);
   const onEdgesChange = useSetAtom(onEdgesChangeAtom);
   const setSelectedNode = useSetAtom(selectedNodeAtom);
@@ -91,6 +93,7 @@ export function WorkflowCanvas() {
   const connectingNodeId = useRef<string | null>(null);
   const justCreatedNodeFromConnection = useRef(false);
   const viewportInitialized = useRef(false);
+  const [isCanvasReady, setIsCanvasReady] = useState(false);
   const [contextMenuState, setContextMenuState] =
     useState<ContextMenuState>(null);
 
@@ -102,20 +105,43 @@ export function WorkflowCanvas() {
     setContextMenuState(null);
   }, []);
 
+  // Track which workflow we've loaded viewport for to prevent re-running
+  // Use undefined as initial to distinguish from null (homepage)
+  const loadedViewportForWorkflowRef = useRef<string | null | undefined>(
+    undefined
+  );
+
   // Load saved viewport when workflow changes
   useEffect(() => {
+    // Skip if we've already loaded viewport for this workflow
+    if (loadedViewportForWorkflowRef.current === currentWorkflowId) {
+      return;
+    }
+
     console.log("[Viewport] Effect triggered", {
       currentWorkflowId,
       viewportInitialized: viewportInitialized.current,
+      rightPanelWidth,
     });
 
+    // Homepage - no workflow ID
     if (!currentWorkflowId) {
       console.log("[Viewport] No workflow ID, using fitView");
+      loadedViewportForWorkflowRef.current = null;
       // Use imperative fitView after a brief delay for React Flow to be ready
       setTimeout(() => {
         fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
         viewportInitialized.current = true;
+        // Small delay before showing to ensure layout is stable
+        setTimeout(() => setIsCanvasReady(true), 50);
       }, 0);
+      return;
+    }
+
+    // Workflow page - wait for rightPanelWidth to be set before loading viewport
+    // This prevents loading without the offset and then jumping
+    if (!rightPanelWidth) {
+      console.log("[Viewport] Waiting for rightPanelWidth to be set");
       return;
     }
 
@@ -131,21 +157,43 @@ export function WorkflowCanvas() {
     if (saved) {
       try {
         const viewport = JSON.parse(saved) as Viewport;
-        console.log("[Viewport] Restoring saved viewport", viewport);
+
+        // Apply offset to center content in visible area when panel is present
+        // Parse percentage (e.g., "30%" -> 0.3)
+        const panelWidthPercent = parseFloat(rightPanelWidth) / 100;
+        // Shift content LEFT by half the panel width to center in visible area
+        // viewport.x is a pixel offset, so we add pixels to shift content left
+        const offsetPixels = (window.innerWidth * panelWidthPercent) / 2;
+        const adjustedViewport = {
+          ...viewport,
+          x: viewport.x + offsetPixels,
+        };
+
+        console.log("[Viewport] Restoring saved viewport", {
+          original: viewport,
+          adjusted: adjustedViewport,
+          offsetPixels,
+        });
         // Set viewport immediately
-        setViewport(viewport, { duration: 0 });
+        setViewport(adjustedViewport, { duration: 0 });
+        loadedViewportForWorkflowRef.current = currentWorkflowId;
         viewportInitialized.current = true;
+        setIsCanvasReady(true);
       } catch (error) {
         console.error("[Viewport] Failed to parse viewport:", error);
+        loadedViewportForWorkflowRef.current = currentWorkflowId;
         fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
         viewportInitialized.current = true;
+        setTimeout(() => setIsCanvasReady(true), 50);
       }
     } else {
       console.log("[Viewport] No saved viewport, using fitView");
+      loadedViewportForWorkflowRef.current = currentWorkflowId;
       fitView({ maxZoom: 1, minZoom: 0.5, padding: 0.2, duration: 0 });
       viewportInitialized.current = true;
+      setTimeout(() => setIsCanvasReady(true), 50);
     }
-  }, [currentWorkflowId, setViewport, fitView]);
+  }, [currentWorkflowId, setViewport, fitView, rightPanelWidth]);
 
   // Save viewport changes
   const onMoveEnd = useCallback(
@@ -394,10 +442,13 @@ export function WorkflowCanvas() {
     [setSelectedNode]
   );
 
-  console.log("[Viewport] Render", { currentWorkflowId });
+  console.log("[Viewport] Render", { currentWorkflowId, isCanvasReady });
 
   return (
-    <div className="relative h-full w-full bg-background">
+    <div
+      className="relative h-full w-full bg-background transition-opacity duration-300"
+      style={{ opacity: isCanvasReady ? 1 : 0 }}
+    >
       <Canvas
         className="bg-background"
         connectionLineComponent={Connection}
