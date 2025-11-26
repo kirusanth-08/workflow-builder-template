@@ -121,6 +121,35 @@ export function WorkflowCanvas() {
   // Track previous panel width to calculate viewport shift
   const prevPanelWidthRef = useRef<string | null>(null);
 
+  // Pre-shift viewport when transitioning from homepage (before sidebar animates)
+  const hasPreShiftedRef = useRef(false);
+  useEffect(() => {
+    if (isTransitioningFromHomepage && !hasPreShiftedRef.current) {
+      hasPreShiftedRef.current = true;
+
+      // Check if sidebar is collapsed from cookie (atom may not be initialized yet)
+      const collapsedCookie = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("sidebar-collapsed="));
+      const isCollapsed = collapsedCookie?.split("=")[1] === "true";
+
+      // Skip if sidebar is collapsed - content should stay centered
+      if (isCollapsed) {
+        return;
+      }
+
+      // Shift viewport left to center content in the future visible area
+      // Default sidebar is 30%, so shift by 15% of window width
+      const viewport = getViewport();
+      const defaultSidebarPercent = 0.3;
+      const shiftPixels = (window.innerWidth * defaultSidebarPercent) / 2;
+      setViewport(
+        { ...viewport, x: viewport.x - shiftPixels },
+        { duration: 0 }
+      );
+    }
+  }, [isTransitioningFromHomepage, getViewport, setViewport]);
+
   // Shift viewport when sidebar opens/closes to keep content centered
   useEffect(() => {
     if (!viewportInitialized.current) {
@@ -144,11 +173,19 @@ export function WorkflowCanvas() {
       return;
     }
 
+    // Skip the initial home -> workflow transition (already pre-shifted)
+    if (hasPreShiftedRef.current && prevWidth === null && currentWidth) {
+      hasPreShiftedRef.current = false; // Reset for future transitions
+      return;
+    }
+
     // Shift viewport to compensate for width change
     // When sidebar opens (widthChange > 0), shift content left (decrease x)
     // When sidebar closes (widthChange < 0), shift content right (increase x)
     const viewport = getViewport();
     const shiftPixels = (window.innerWidth * widthChange) / 2;
+
+    // Animate the shift
     setViewport(
       { ...viewport, x: viewport.x - shiftPixels },
       { duration: isPanelAnimating ? 300 : 0 }
