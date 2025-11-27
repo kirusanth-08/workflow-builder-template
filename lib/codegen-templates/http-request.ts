@@ -10,10 +10,28 @@ export default `export async function httpRequestStep(input: {
 }) {
   "use step";
   
-  const headers = input.httpHeaders ? JSON.parse(input.httpHeaders) : {};
-  const body = input.httpMethod !== "GET" && input.httpBody 
-    ? input.httpBody 
-    : undefined;
+  let headers = {};
+  if (input.httpHeaders) {
+    try {
+      headers = JSON.parse(input.httpHeaders);
+    } catch {
+      // If parsing fails, use empty headers
+    }
+  }
+  
+  let body: string | undefined;
+  if (input.httpMethod !== "GET" && input.httpBody) {
+    try {
+      const parsedBody = JSON.parse(input.httpBody);
+      if (Object.keys(parsedBody).length > 0) {
+        body = JSON.stringify(parsedBody);
+      }
+    } catch {
+      if (input.httpBody.trim() && input.httpBody.trim() !== "{}") {
+        body = input.httpBody;
+      }
+    }
+  }
   
   const response = await fetch(input.endpoint, {
     method: input.httpMethod,
