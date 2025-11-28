@@ -9,13 +9,20 @@ export type ConditionInput = StepInput & {
   condition: boolean;
 };
 
-// biome-ignore lint/suspicious/useAwait: workflow "use step" requires async
-export async function conditionStep(input: ConditionInput): Promise<{
+type ConditionResult = {
   condition: boolean;
-}> {
-  "use step";
+};
 
+function evaluateCondition(input: ConditionInput): ConditionResult {
+  return { condition: input.condition };
+}
+
+// biome-ignore lint/suspicious/useAwait: workflow "use step" requires async
+export async function conditionStep(
+  input: ConditionInput
+): Promise<ConditionResult> {
+  "use step";
   return withStepLogging(input, () =>
-    Promise.resolve({ condition: input.condition })
+    Promise.resolve(evaluateCondition(input))
   );
 }
