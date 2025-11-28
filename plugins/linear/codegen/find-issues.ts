@@ -34,13 +34,23 @@ export async function findIssuesStep(input: {
   
   const issues = await linear.issues({ filter });
   
+  const mappedIssues = await Promise.all(
+    issues.nodes.map(async (issue) => {
+      const state = await issue.state;
+      return {
+        id: issue.id,
+        title: issue.title,
+        url: issue.url,
+        state: state?.name || 'Unknown',
+        priority: issue.priority,
+        assigneeId: issue.assigneeId || undefined,
+      };
+    })
+  );
+  
   return {
-    issues: issues.nodes.map(issue => ({
-      id: issue.id,
-      title: issue.title,
-      url: issue.url,
-    })),
-    count: issues.nodes.length,
+    issues: mappedIssues,
+    count: mappedIssues.length,
   };
 }`;
 
