@@ -115,8 +115,19 @@ type MissingIntegrationInfo = {
   nodeNames: string[];
 };
 
+// Built-in actions that require integrations but aren't in the plugin registry
+const BUILTIN_ACTION_INTEGRATIONS: Record<string, IntegrationType> = {
+  "Database Query": "database",
+};
+
+// Labels for built-in integration types that don't have plugins
+const BUILTIN_INTEGRATION_LABELS: Record<string, string> = {
+  database: "Database",
+};
+
 // Get missing integrations for workflow nodes
 // Uses the plugin registry to determine which integrations are required
+// Also handles built-in actions that aren't in the plugin registry
 function getMissingIntegrations(
   nodes: WorkflowNode[],
   userIntegrations: Array<{ type: IntegrationType }>
@@ -136,13 +147,15 @@ function getMissingIntegrations(
       continue;
     }
 
-    // Look up the integration type from the plugin registry
+    // Look up the integration type from the plugin registry first
     const action = findActionById(actionType);
-    if (!action?.integration) {
+    // Fall back to built-in action integrations for actions not in the registry
+    const requiredIntegrationType =
+      action?.integration || BUILTIN_ACTION_INTEGRATIONS[actionType];
+
+    if (!requiredIntegrationType) {
       continue;
     }
-
-    const requiredIntegrationType = action.integration;
 
     // Check if this node has an integrationId configured
     const hasIntegrationConfigured = Boolean(node.data.config?.integrationId);
@@ -161,7 +174,10 @@ function getMissingIntegrations(
   return Array.from(missingByType.entries()).map(
     ([integrationType, nodeNames]) => ({
       integrationType,
-      integrationLabel: integrationLabels[integrationType] || integrationType,
+      integrationLabel:
+        integrationLabels[integrationType] ||
+        BUILTIN_INTEGRATION_LABELS[integrationType] ||
+        integrationType,
       nodeNames,
     })
   );
