@@ -169,7 +169,9 @@ function getMissingIntegrations(
     // Check if user has any integration of this type
     if (!userIntegrationTypes.has(requiredIntegrationType)) {
       const existing = missingByType.get(requiredIntegrationType) || [];
-      existing.push(node.data.label || actionType);
+      // Use human-readable label from registry if no custom label
+      const actionInfo = findActionById(actionType);
+      existing.push(node.data.label || actionInfo?.label || actionType);
       missingByType.set(requiredIntegrationType, existing);
     }
   }

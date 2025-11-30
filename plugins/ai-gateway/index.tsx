@@ -3,6 +3,7 @@ import type { IntegrationPlugin } from "../registry";
 import { registerIntegration } from "../registry";
 import { generateImageCodegenTemplate } from "./codegen/generate-image";
 import { generateTextCodegenTemplate } from "./codegen/generate-text";
+import { AiGatewayIcon } from "./icon";
 import { AiGatewaySettings } from "./settings";
 import { GenerateImageConfigFields } from "./steps/generate-image/config";
 import { GenerateTextConfigFields } from "./steps/generate-text/config";
@@ -13,8 +14,9 @@ const aiGatewayPlugin: IntegrationPlugin = {
   description: "Generate text and images using AI models",
 
   icon: {
-    type: "lucide",
-    value: "Sparkles",
+    type: "svg",
+    value: "AiGatewayIcon",
+    svgComponent: AiGatewayIcon,
   },
 
   settingsComponent: AiGatewaySettings,

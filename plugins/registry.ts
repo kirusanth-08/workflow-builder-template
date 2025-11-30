@@ -1,4 +1,5 @@
 import type { IntegrationType } from "@/lib/types/integration";
+import { LEGACY_ACTION_MAPPINGS } from "./legacy-mappings";
 
 /**
  * Action Definition
@@ -135,10 +136,13 @@ export function computeActionId(
 /**
  * Parse a full action ID into integration type and action slug
  */
-export function parseActionId(actionId: string): {
+export function parseActionId(actionId: string | undefined | null): {
   integration: string;
   slug: string;
 } | null {
+  if (!actionId || typeof actionId !== "string") {
+    return null;
+  }
   const parts = actionId.split("/");
   if (parts.length !== 2) {
     return null;
@@ -221,7 +225,13 @@ export function getActionsByCategory(): Record<string, ActionWithFullId[]> {
  * Find an action by full ID (e.g., "resend/send-email")
  * Also supports legacy IDs (e.g., "Send Email") for backward compatibility
  */
-export function findActionById(actionId: string): ActionWithFullId | undefined {
+export function findActionById(
+  actionId: string | undefined | null
+): ActionWithFullId | undefined {
+  if (!actionId) {
+    return undefined;
+  }
+
   // First try parsing as a namespaced ID
   const parsed = parseActionId(actionId);
   if (parsed) {
@@ -238,7 +248,14 @@ export function findActionById(actionId: string): ActionWithFullId | undefined {
     }
   }
 
-  // Fall back to legacy label-based lookup for backward compatibility
+  // Check legacy mappings for backward compatibility
+  const mappedId = LEGACY_ACTION_MAPPINGS[actionId];
+  if (mappedId) {
+    // Recursively look up the mapped ID
+    return findActionById(mappedId);
+  }
+
+  // Fall back to legacy label-based lookup (exact label match)
   for (const plugin of integrationRegistry.values()) {
     const action = plugin.actions.find((a) => a.label === actionId);
     if (action) {

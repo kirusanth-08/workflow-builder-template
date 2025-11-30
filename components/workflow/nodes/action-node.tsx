@@ -137,9 +137,29 @@ const getProviderLogo = (actionType: string) => {
       break;
   }
 
-  // Look up action in plugin registry
+  // Look up action in plugin registry and get the integration icon
   const action = findActionById(actionType);
   if (action) {
+    const plugin = getIntegration(action.integration);
+    if (plugin?.icon) {
+      // Render integration logo based on icon type
+      if (plugin.icon.type === "image") {
+        return (
+          <Image
+            alt={plugin.label}
+            className="size-12"
+            height={48}
+            src={plugin.icon.value}
+            width={48}
+          />
+        );
+      }
+      if (plugin.icon.type === "svg" && plugin.icon.svgComponent) {
+        const SvgIcon = plugin.icon.svgComponent;
+        return <SvgIcon className="size-12" />;
+      }
+    }
+    // Fall back to action icon if no integration icon
     const ActionIcon = action.icon;
     return <ActionIcon className="size-12" />;
   }
@@ -292,7 +312,9 @@ export const ActionNode = memo(({ data, selected, id }: ActionNodeProps) => {
     );
   }
 
-  const displayTitle = data.label || actionType;
+  // Get human-readable label from registry if no custom label is set
+  const actionInfo = findActionById(actionType);
+  const displayTitle = data.label || actionInfo?.label || actionType;
   const displayDescription =
     data.description || getIntegrationFromActionType(actionType);
 

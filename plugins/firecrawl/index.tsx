@@ -63,6 +63,7 @@ const firecrawlPlugin: IntegrationPlugin = {
     {
       slug: "scrape",
       label: "Scrape URL",
+      legacyLabels: ["Scrape", "Scrape Website"],
       description: "Scrape content from a URL",
       category: "Firecrawl",
       icon: Flame,
@@ -75,6 +76,7 @@ const firecrawlPlugin: IntegrationPlugin = {
     {
       slug: "search",
       label: "Search Web",
+      legacyLabels: ["Search"],
       description: "Search the web with Firecrawl",
       category: "Firecrawl",
       icon: Search,
