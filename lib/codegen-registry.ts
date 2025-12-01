@@ -7,7 +7,7 @@
  * Contains auto-generated codegen templates for steps that export stepHandler.
  * These templates are used when exporting workflows to standalone projects.
  *
- * Generated templates: 1
+ * Generated templates: 5
  */
 
 /**
@@ -15,6 +15,242 @@
  * Maps action IDs to their generated export code templates
  */
 export const AUTO_GENERATED_TEMPLATES: Record<string, string> = {
+  "firecrawl/scrape": `import FirecrawlApp from "@mendable/firecrawl-js";
+import { fetchCredentials } from "./lib/credential-helper";
+
+type ScrapeResult = {
+  markdown?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type FirecrawlScrapeCoreInput = {
+  url: string;
+  formats?: ("markdown" | "html" | "rawHtml" | "links" | "screenshot")[];
+};
+
+export async function firecrawlScrapeStep(
+  input: FirecrawlScrapeCoreInput,
+): Promise<ScrapeResult> {
+  "use step";
+  const credentials = await fetchCredentials("firecrawl");
+  const apiKey = credentials.FIRECRAWL_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Firecrawl API Key is not configured.");
+  }
+
+  try {
+    const firecrawl = new FirecrawlApp({ apiKey });
+    const result = await firecrawl.scrape(input.url, {
+      formats: input.formats || ["markdown"],
+    });
+
+    return {
+      markdown: result.markdown,
+      metadata: result.metadata,
+    };
+  } catch (error) {
+    throw new Error(\`Failed to scrape: \${getErrorMessage(error)}\`);
+  }
+}
+`,
+
+  "firecrawl/search": `import FirecrawlApp from "@mendable/firecrawl-js";
+import { fetchCredentials } from "./lib/credential-helper";
+
+type SearchResult = {
+  web?: unknown[];
+};
+
+export type FirecrawlSearchCoreInput = {
+  query: string;
+  limit?: number;
+  scrapeOptions?: {
+    formats?: ("markdown" | "html" | "rawHtml" | "links" | "screenshot")[];
+  };
+};
+
+export async function firecrawlSearchStep(
+  input: FirecrawlSearchCoreInput,
+): Promise<SearchResult> {
+  "use step";
+  const credentials = await fetchCredentials("firecrawl");
+  const apiKey = credentials.FIRECRAWL_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Firecrawl API Key is not configured.");
+  }
+
+  try {
+    const firecrawl = new FirecrawlApp({ apiKey });
+    const result = await firecrawl.search(input.query, {
+      limit: input.limit ? Number(input.limit) : undefined,
+      scrapeOptions: input.scrapeOptions,
+    });
+
+    return {
+      web: result.web,
+    };
+  } catch (error) {
+    throw new Error(\`Failed to search: \${getErrorMessage(error)}\`);
+  }
+}
+`,
+
+  "linear/create-ticket": `import { LinearClient } from "@linear/sdk";
+import { fetchCredentials } from "./lib/credential-helper";
+
+type CreateTicketResult =
+  | { success: true; id: string; url: string; title: string }
+  | { success: false; error: string };
+
+export type CreateTicketCoreInput = {
+  ticketTitle: string;
+  ticketDescription: string;
+};
+
+export async function createTicketStep(
+  input: CreateTicketCoreInput,
+): Promise<CreateTicketResult> {
+  "use step";
+  const credentials = await fetchCredentials("linear");
+  const apiKey = credentials.LINEAR_API_KEY;
+  const teamId = credentials.LINEAR_TEAM_ID;
+
+  if (!apiKey) {
+    return {
+      success: false,
+      error:
+        "LINEAR_API_KEY is not configured. Please add it in Project Integrations.",
+    };
+  }
+
+  try {
+    const linear = new LinearClient({ apiKey });
+
+    let targetTeamId = teamId;
+    if (!targetTeamId) {
+      const teams = await linear.teams();
+      const firstTeam = teams.nodes[0];
+      if (!firstTeam) {
+        return {
+          success: false,
+          error: "No teams found in Linear workspace",
+        };
+      }
+      targetTeamId = firstTeam.id;
+    }
+
+    const issuePayload = await linear.createIssue({
+      title: input.ticketTitle,
+      description: input.ticketDescription,
+      teamId: targetTeamId,
+    });
+
+    const issue = await issuePayload.issue;
+
+    if (!issue) {
+      return {
+        success: false,
+        error: "Failed to create issue",
+      };
+    }
+
+    return {
+      success: true,
+      id: issue.id,
+      url: issue.url,
+      title: issue.title,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: \`Failed to create ticket: \${getErrorMessage(error)}\`,
+    };
+  }
+}
+`,
+
+  "linear/find-issues": `import { LinearClient } from "@linear/sdk";
+import { fetchCredentials } from "./lib/credential-helper";
+
+type FindIssuesResult =
+  | { success: true; issues: LinearIssue[]; count: number }
+  | { success: false; error: string };
+
+export type FindIssuesCoreInput = {
+  linearAssigneeId?: string;
+  linearTeamId?: string;
+  linearStatus?: string;
+  linearLabel?: string;
+};
+
+export async function findIssuesStep(
+  input: FindIssuesCoreInput,
+): Promise<FindIssuesResult> {
+  "use step";
+  const credentials = await fetchCredentials("linear");
+  const apiKey = credentials.LINEAR_API_KEY;
+
+  if (!apiKey) {
+    return {
+      success: false,
+      error:
+        "LINEAR_API_KEY is not configured. Please add it in Project Integrations.",
+    };
+  }
+
+  try {
+    const linear = new LinearClient({ apiKey });
+
+    const filter: Record<string, unknown> = {};
+
+    if (input.linearAssigneeId) {
+      filter.assignee = { id: { eq: input.linearAssigneeId } };
+    }
+
+    if (input.linearTeamId) {
+      filter.team = { id: { eq: input.linearTeamId } };
+    }
+
+    if (input.linearStatus && input.linearStatus !== "any") {
+      filter.state = { name: { eqIgnoreCase: input.linearStatus } };
+    }
+
+    if (input.linearLabel) {
+      filter.labels = { name: { eqIgnoreCase: input.linearLabel } };
+    }
+
+    const issues = await linear.issues({ filter });
+
+    const mappedIssues: LinearIssue[] = await Promise.all(
+      issues.nodes.map(async (issue) => {
+        const state = await issue.state;
+        return {
+          id: issue.id,
+          title: issue.title,
+          url: issue.url,
+          state: state?.name || "Unknown",
+          priority: issue.priority,
+          assigneeId: issue.assigneeId || undefined,
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      issues: mappedIssues,
+      count: mappedIssues.length,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: \`Failed to find issues: \${getErrorMessage(error)}\`,
+    };
+  }
+}
+`,
+
   "resend/send-email": `import { Resend } from "resend";
 import { fetchCredentials } from "./lib/credential-helper";
 
